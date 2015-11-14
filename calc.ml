@@ -45,8 +45,19 @@ let has_sub_expression (s : token_stream) : bool =
 	List.exists (fun x -> x = CParen) s
 
 
-let parse (s : token_stream) : expr =
-	failwith "unfinished"
+let sub_expression (s : token_stream) : token_stream =
+	if not has_sub_expression s then s else
+		failwith "this is the hard bit"
+
+
+
+let rec parse (s : token_stream) : expr =
+	match s with
+	|[] -> failwith "no expression"
+	|[Int x] -> Val x
+	|e1::Plus::e2::tl  -> Plus (parse e1,parse e2)
+	|e1::Minus::e2::tl -> Minus (parse e1,parse e2)
+	|e1::Times::e2::tl -> Times (parse e1,parse e2)
 
 
 let rec eval (e:expr) : int =
