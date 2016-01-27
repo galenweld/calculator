@@ -8,18 +8,19 @@ type token = Int of int | Plus | Minus | Times | OParen | CParen
 
 type token_stream = token list
 
-let lex (input : bytes) : token_stream =
+let lex (input:bytes) : token_stream =
   let rec text_to_char_list (t : bytes) : char list =
     match t with
     | "" -> []
-    | _  -> (Bytes.get t 0)::(text_to_char_list (sub t 1 ((Bytes.length t) - 1)))
+    | _  -> (Bytes.get t 0)::(text_to_char_list (Bytes.sub t 1
+                                                   ((Bytes.length t) - 1)))
   in
 
 
-  let char_list_to_token_list (s : char list) : token list =
+  let char_list_to_token_list (s:char list) : token list =
     let rec fold_helper l c =
       match c with
-      | ' ' -> l @ []
+      | ' ' -> l
       | '(' -> l @ [OParen]
       | ')' -> l @ [CParen]
       | '+' -> l @ [Plus]
@@ -30,7 +31,7 @@ let lex (input : bytes) : token_stream =
   in
 
 
-  let rec fix_ints (s : token list) : token list =
+  let rec fix_ints (s:token list) : token list =
     match s with
     | [] -> []
     | Int a::Int b::tl -> fix_ints ((Int (10 * a + b))::tl)
@@ -39,20 +40,56 @@ let lex (input : bytes) : token_stream =
   fix_ints (char_list_to_token_list (text_to_char_list input))
 
 
-let has_sub_expression (s : token_stream) : bool =
-  List.exists (fun x -> x = OParen) s &&
-  List.exists (fun x -> x = CParen) s
+let rec parse (s:token_stream) : expr =
+  let (expr, s') = parse_expr s in
+  if s' = [] then expr else failwith "Invalid token stream."
 
+and parse_expr (s:token_stream) : (expr * token_stream) =
+  let (term, s') = parse_term s in
 
-let sub_expression (s : token_stream) : token_stream =
-  if not (has_sub_expression s) then s else
-    failwith "this is the hard bit"
+  let rec termer (t:expr) (s':token_stream) : (expr * token_stream) =
+    match s' with
+    | Plus::tl ->
+      begin
+        let (t', tl') = parse_term tl in
+        termer (Plus (t, t')) tl'
+      end
+    | Minus::tl ->
+      begin
+        let (t', tl') = parse_term tl in
+        termer (Minus (t, t')) tl'
+      end
+    | _ -> (t, s')
+  in
 
+  termer term s'
 
-let rec parse (s : token_stream) : expr =
+and parse_term (s:token_stream) : (expr * token_stream) =
+  let (factor, s') = parse_factor s in
+
+  let rec factorer (f:expr) (s':token_stream) : (expr * token_stream) =
+    match s' with
+    | Times::tl ->
+      begin
+        let (f', tl') = parse_factor tl in
+        factorer (Times (f, f')) tl'
+      end
+    | _ -> (f, s')
+  in
+
+  factorer factor s'
+
+and parse_factor (s:token_stream) : (expr * token_stream) =
   match s with
-  | [] -> failwith "no expression"
-  | [Int x] -> Val x
+  | Int n::tl -> (Val n, tl)
+  | OParen::tl ->
+    begin
+      let (expr, s') = parse_expr s in
+      match s' with
+      | CParen::tl' -> (expr, tl')
+      | _ -> failwith "Missing )."
+    end
+  | _ -> failwith "Not a factor."
 
 
 let rec eval (e:expr) : int =
@@ -61,3 +98,10 @@ let rec eval (e:expr) : int =
   | Plus (e1,e2) -> (eval e1) + (eval e2)
   | Minus (e1,e2) -> (eval e1) - (eval e2)
   | Times (e1,e2) -> (eval e1) * (eval e2)
+
+
+let calc (input:bytes) : int =
+  let tokens = lex input in
+  let expr = parse tokens in
+  eval expr
+
