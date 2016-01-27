@@ -9,27 +9,31 @@ type token = Int of int | Plus | Minus | Times | OParen | CParen
 type token_stream = token list
 
 let lex (input:bytes) : token_stream =
-  let rec text_to_char_list (t : bytes) : char list =
+  (* This intentionally contructucts the [char list] backwards to all for
+  tail-recursive processing in the next helper function. *)
+  let rec text_to_char_list (t:bytes) (acc:char list) : char list =
     match t with
-    | "" -> []
-    | _  -> (Bytes.get t 0)::(text_to_char_list (Bytes.sub t 1
-                                                   ((Bytes.length t) - 1)))
+    | "" -> acc
+    | _  ->
+      begin
+        let len = Bytes.length t in
+        text_to_char_list (Bytes.sub t 1 (len - 1))
+          ((Bytes.get t 0)::acc)
+      end
   in
-
 
   let char_list_to_token_list (s:char list) : token list =
     let rec fold_helper l c =
       match c with
       | ' ' -> l
-      | '(' -> l @ [OParen]
-      | ')' -> l @ [CParen]
-      | '+' -> l @ [Plus]
-      | '-' -> l @ [Minus]
-      | '*' -> l @ [Times]
-      |  x  -> l @ [Int (int_of_string (Bytes.make 1 x))]
+      | '(' -> OParen::l
+      | ')' -> CParen::l
+      | '+' -> Plus::l
+      | '-' -> Minus::l
+      | '*' -> Times::l
+      | x -> (Int (int_of_string (Bytes.make 1 x)))::l
     in List.fold_left fold_helper [] s
   in
-
 
   let rec fix_ints (s:token list) : token list =
     match s with
@@ -37,7 +41,7 @@ let lex (input:bytes) : token_stream =
     | Int a::Int b::tl -> fix_ints ((Int (10 * a + b))::tl)
     | hd::tl -> hd::(fix_ints tl)
   in
-  fix_ints (char_list_to_token_list (text_to_char_list input))
+  fix_ints (char_list_to_token_list (text_to_char_list input []))
 
 
 let rec parse (s:token_stream) : expr =
